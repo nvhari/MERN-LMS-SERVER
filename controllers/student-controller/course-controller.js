@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const Course = require("../../models/Course");
 const StudentCourses = require("../../models/StudentCourses");
 
@@ -9,8 +10,6 @@ const getAllStudentViewCourses = async (req, res) => {
       primaryLanguage = [],
       sortBy = "price-lowtohigh",
     } = req.query;
-
-    console.log(req.query, "req.query");
 
     let filters = {};
     if (category.length) {
@@ -27,21 +26,16 @@ const getAllStudentViewCourses = async (req, res) => {
     switch (sortBy) {
       case "price-lowtohigh":
         sortParam.pricing = 1;
-
         break;
       case "price-hightolow":
         sortParam.pricing = -1;
-
         break;
       case "title-atoz":
         sortParam.title = 1;
-
         break;
       case "title-ztoa":
         sortParam.title = -1;
-
         break;
-
       default:
         sortParam.pricing = 1;
         break;
@@ -54,10 +48,10 @@ const getAllStudentViewCourses = async (req, res) => {
       data: coursesList,
     });
   } catch (e) {
-    console.log(e);
+    console.error(e);
     res.status(500).json({
       success: false,
-      message: "Some error occured!",
+      message: "Some error occurred!",
     });
   }
 };
@@ -65,6 +59,11 @@ const getAllStudentViewCourses = async (req, res) => {
 const getStudentViewCourseDetails = async (req, res) => {
   try {
     const { id } = req.params;
+
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(400).json({ success: false, message: "Invalid course ID" });
+    }
+
     const courseDetails = await Course.findById(id);
 
     if (!courseDetails) {
@@ -80,10 +79,10 @@ const getStudentViewCourseDetails = async (req, res) => {
       data: courseDetails,
     });
   } catch (e) {
-    console.log(e);
+    console.error(e);
     res.status(500).json({
       success: false,
-      message: "Some error occured!",
+      message: "Some error occurred!",
     });
   }
 };
@@ -91,21 +90,33 @@ const getStudentViewCourseDetails = async (req, res) => {
 const checkCoursePurchaseInfo = async (req, res) => {
   try {
     const { id, studentId } = req.params;
-    const studentCourses = await StudentCourses.findOne({
-      userId: studentId,
-    });
 
-    const ifStudentAlreadyBoughtCurrentCourse =
-      studentCourses.courses.findIndex((item) => item.courseId === id) > -1;
+    // Validate IDs
+    if (!mongoose.isValidObjectId(id) || !mongoose.isValidObjectId(studentId)) {
+      return res.status(400).json({ success: false, message: "Invalid course or student ID" });
+    }
+
+    const studentCourses = await StudentCourses.findOne({ userId: studentId });
+
+    // If student has no purchased courses yet
+    if (!studentCourses || !Array.isArray(studentCourses.courses)) {
+      return res.status(200).json({ success: true, data: false });
+    }
+
+    // Compare ObjectIds properly
+    const hasPurchased = studentCourses.courses.some(
+      (item) => item.courseId.toString() === id
+    );
+
     res.status(200).json({
       success: true,
-      data: ifStudentAlreadyBoughtCurrentCourse,
+      data: hasPurchased,
     });
   } catch (e) {
-    console.log(e);
+    console.error(e);
     res.status(500).json({
       success: false,
-      message: "Some error occured!",
+      message: "Some error occurred!",
     });
   }
 };
