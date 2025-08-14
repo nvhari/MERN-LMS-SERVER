@@ -4,16 +4,17 @@ const Order = require("../../models/Order");
 const Course = require("../../models/Course");
 const StudentCourses = require("../../models/StudentCourses");
 
-// ✅ Check for required env variables at startup
-if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
+// ✅ Check environment variables at startup
+if (!process.env.REACT_APP_RAZORPAY_KEY_SECRET || !process.env.REACT_APP_RAZORPAY_KEY_SECRET) {
   console.error("❌ Missing Razorpay environment variables.");
   process.exit(1);
 }
 
 const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID,
-  key_secret: process.env.RAZORPAY_KEY_SECRET,
+  key_id: process.env.REACT_APP_RAZORPAY_KEY_ID,
+  key_secret: process.env.REACT_APP_RAZORPAY_KEY_SECRET,
 });
+
 
 // ==================== CREATE ORDER ====================
 const createOrder = async (req, res) => {
@@ -30,30 +31,40 @@ const createOrder = async (req, res) => {
       coursePricing,
     } = req.body;
 
-    // Validate
+    // ✅ Validate required fields
     if (!userId || !courseId || !coursePricing) {
-      return res.status(400).json({ success: false, message: "Missing required fields." });
+      return res.status(400).json({
+        success: false,
+        message: "Missing required fields (userId, courseId, coursePricing).",
+      });
     }
 
     const price = Number(coursePricing);
     if (isNaN(price) || price <= 0) {
-      return res.status(400).json({ success: false, message: "Invalid coursePricing value." });
+      return res.status(400).json({
+        success: false,
+        message: "Invalid coursePricing value.",
+      });
     }
 
-    // Create Razorpay order
+    // ✅ Create Razorpay order
     let razorpayOrder;
     try {
       razorpayOrder = await razorpay.orders.create({
-        amount: price * 100,
+        amount: Math.round(price * 100), // in paise
         currency: "INR",
         receipt: `receipt_${Date.now()}`,
       });
     } catch (err) {
-      console.error("❌ Razorpay create order error:", err);
-      return res.status(502).json({ success: false, message: "Failed to create order with Razorpay" });
+      console.error("❌ Razorpay create order error:", err.message);
+      return res.status(502).json({
+        success: false,
+        message: "Failed to create order with Razorpay",
+        error: err.message,
+      });
     }
 
-    // Save order in DB
+    // ✅ Save order in DB
     try {
       const newOrder = await Order.create({
         userId,
@@ -79,16 +90,23 @@ const createOrder = async (req, res) => {
           amount: razorpayOrder.amount,
           currency: razorpayOrder.currency,
           orderId: newOrder._id,
-          key: process.env.RAZORPAY_KEY_ID,
+          key: process.env.REACT_APP_RAZORPAY_KEY_ID,
         },
       });
     } catch (err) {
-      console.error("❌ Database save error (Order):", err);
-      return res.status(500).json({ success: false, message: "Database error while saving order." });
+      console.error("❌ Database save error (Order):", err.message);
+      return res.status(500).json({
+        success: false,
+        message: "Database error while saving order.",
+        error: err.message,
+      });
     }
   } catch (err) {
-    console.error("❌ Create order unknown error:", err);
-    return res.status(500).json({ success: false, message: "Unexpected server error." });
+    console.error("❌ Create order unknown error:", err.message);
+    return res.status(500).json({
+      success: false,
+      message: err.message || "Unexpected server error.",
+    });
   }
 };
 
@@ -102,6 +120,7 @@ const capturePaymentAndFinalizeOrder = async (req, res) => {
       orderId,
     } = req.body;
 
+    // ✅ Validate required fields
     if (
       !razorpay_payment_id ||
       !razorpay_order_id ||
@@ -183,7 +202,7 @@ const capturePaymentAndFinalizeOrder = async (req, res) => {
       data: order,
     });
   } catch (err) {
-    console.error("❌ Capture payment error:", err.stack || err);
+    console.error("❌ Capture payment error:", err.message);
     res.status(500).json({
       success: false,
       message: err.message || "Some error occurred while capturing payment.",
